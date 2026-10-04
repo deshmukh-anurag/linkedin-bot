@@ -1,0 +1,24 @@
+{
+  "name": "cognitive-linkedin-outreach",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "doctor": "node --use-env-proxy src/cli.js doctor",
+    "login": "node --use-env-proxy src/cli.js login",
+    "sheets:init": "node --use-env-proxy src/cli.js sheets-init",
+    "sync": "node --use-env-proxy src/cli.js sync",
+    "status": "node --use-env-proxy src/cli.js status",
+    "test": "node --test",
+    "check": "node scripts/check.js",
+    "collect": "node --use-env-proxy src/cli.js collect"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "googleapis": "^160.0.0",
+    "playwright": "^1.58.0"
+  }
+}
