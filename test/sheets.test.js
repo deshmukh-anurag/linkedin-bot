@@ -109,3 +109,9 @@ test('migration refuses to overwrite occupied enrichment columns', async () => {
   await assert.rejects(sheets.init(), /existing data/);
   assert.equal(requests.length, 0);
 });
+
+test('upsert cannot resurrect a missing completed row', async () => {
+  const {sheets,calls}=fixture();
+  const result=await sheets.upsert({...record,status:'done'});
+  assert.equal(result.skipped,true);assert.equal(calls.length,0);
+});

@@ -117,6 +117,7 @@ export class Sheets {
   }
   async upsert(record) {
     const existing = await this.row(record.id);
+    if (!existing && record.status === 'done') return { skipped: true, addedAt: record.done_at };
     const p = JSON.parse(record.payload);
     const url = composeLink({ ...p.person, url: record.profile_url }, record.action);
     const addedAt = record.done_at || existing?.['Added At'] || now();

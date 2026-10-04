@@ -1,4 +1,4 @@
-import { now, safeError, HaltError } from './core.js';
+import { now, safeError, HaltError, matchesKeyword } from './core.js';
 
 export async function sync(store, sheets) {
   const rows = await sheets.rows();
@@ -9,6 +9,8 @@ export async function sync(store, sheets) {
     store.recordEditedMessage(record.id, row['Final Message']);
   }
   for (const record of store.all()) {
+    // Completion is permanent: removing a published row is the user's decision.
+    if (record.status !== 'pending_sheet') continue;
     const result = await sheets.upsert(record);
     store.markDone(record.id, result?.addedAt);
   }
@@ -26,6 +28,10 @@ export async function collect({ c, store, sheets, linkedin, log = console.log })
     seen.add(person.url); scanned++;
     try {
       const profile = await linkedin.profile(person);
+      if (!matchesKeyword(profile.headline, keyword)) {
+        log(`Profile skipped: headline does not match ${keyword}`);
+        return;
+      }
       const contact = store.contacts().find(p => p.profile_url === person.url);
       const record = store.saveProfile(profile, c.action, { person: profile,
         keywords: JSON.parse(contact.keywords), createdAt: now() });
@@ -50,12 +56,6 @@ export async function collect({ c, store, sheets, linkedin, log = console.log })
       for (const person of people) store.discover(person, keyword);
       for (const person of people) await processPerson(person, keyword);
     }
-  }
-  // Also drain previously discovered work that has moved outside today's search pages.
-  for (const person of store.contacts()) {
-    if (scanned >= c.maxProfiles || collected >= c.profilesPerRun) break;
-    const keywords = JSON.parse(person.keywords).filter(k => c.keywords.includes(k));
-    if (keywords.length && person.degree === c.degree) await processPerson({ url: person.profile_url, name: person.name, degree: person.degree }, keywords[0]);
   }
   await sync(store, sheets);
   return { scanned, collected, failed };

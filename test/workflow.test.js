@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../src/store.js';
-import { normalizeProfile, SkipError } from '../src/core.js';
+import { normalizeProfile, matchesKeyword } from '../src/core.js';
 import { collect, sync } from '../src/workflow.js';
 import { composeLink, SEND_FORMULA } from '../src/links.js';
 
@@ -78,4 +78,35 @@ test('collection continues after three extraction errors and skips saved profile
   const data = JSON.parse(store.all()[0].payload);
   assert.equal(data.person.bio, 'Founder profile text'); assert.equal(data.draft, undefined); assert.equal(data.research, undefined);
   store.close();
+});
+
+test('deleting a completed Sheet row never republishes or reopens the profile', async () => {
+  const {store,record}=saved(); store.markDone(record.id);
+  const sheets={rows:async()=>[],upsert:async()=>assert.fail('Deleted row recreated')};
+  const linkedin={verifySession:async()=>{},discover:async()=>[person],profile:async()=>assert.fail('Deleted profile revisited')};
+  await sync(store,sheets);
+  await collect({c,store,sheets,linkedin,log:()=>{}});
+  assert.equal(store.get(record.id).status,'done');store.close();
+});
+
+test('collection rejects nonmatching headlines and does not drain stale discovered contacts', async () => {
+  const store=new Store(':memory:');
+  store.discover({...person,url:'https://www.linkedin.com/in/stale/'},'founder');
+  const written=[];
+  const sheets={rows:async()=>[],upsert:async r=>{written.push(r);return {};}};
+  const linkedin={verifySession:async()=>{},discover:async()=>[person],profile:async p=>{
+    assert.equal(p.url,person.url);return {...p,headline:'Software Engineer',about:'Previously worked for a founder'};
+  }};
+  await collect({c,store,sheets,linkedin,log:()=>{}});
+  assert.equal(written.length,0);assert.equal(store.all().length,0);store.close();
+});
+
+
+test('headline qualification respects word boundaries and configured keywords', () => {
+  assert.equal(matchesKeyword('Co-Founder at Example', 'founder'), true);
+  assert.equal(matchesKeyword('Cofounder at Example', 'co-founder'), true);
+  assert.equal(matchesKeyword('CTO at Example', 'CTO'), true);
+  assert.equal(matchesKeyword('Director at Example', 'CTO'), false);
+  assert.equal(matchesKeyword('Engineering at Example', 'founder'), false);
+  assert.equal(matchesKeyword('', 'founder'), false);
 });

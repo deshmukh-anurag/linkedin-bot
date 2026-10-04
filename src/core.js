@@ -25,3 +25,11 @@ export async function retry(fn, attempts = 3) {
     }
   }
 }
+
+// Search may match historical experience or other text; qualify the visible headline.
+export function matchesKeyword(headline, keyword) {
+  const clean = value => String(value || '').normalize('NFKC').toLowerCase()
+    .replace(/co[\s-]*founder/g, 'co founder').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const term = clean(keyword);
+  return Boolean(term) && ` ${clean(headline)} `.includes(` ${term} `);
+}
