@@ -8,7 +8,7 @@ async function fixture(t, html) {
   const installed = '/opt/ms-playwright/chromium-1228/chrome-linux64/chrome';
   const browser = await chromium.launch({ headless: true, executablePath: process.env.BROWSER_EXECUTABLE_PATH || (fs.existsSync(installed) ? installed : undefined) });
   t.after(() => browser.close()); const page = await browser.newPage();
-  await page.route('**/*', route => route.fulfill({ contentType: 'text/html', body: html }));
+  await page.route('**/*', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: html }));
   return { page, linkedin: new LinkedIn(page, { degree: 1 }) };
 }
 test('profile scraper extracts recipient link without clicking or opening messaging', async t => {
@@ -52,9 +52,30 @@ test('optional extraction errors preserve the profile and record notes', async t
 
 test('reads an observed owner-specific Posts activity link', async t => {
   const { page, linkedin } = await fixture(t, '<main></main>');
-  await page.route('**/in/sample/', route => route.fulfill({ contentType: 'text/html', body: '<main><h1>Sample</h1><a href="/in/sample/recent-activity/posts/">Show all posts</a></main>' }));
-  await page.route('**/recent-activity/posts/', route => route.fulfill({ contentType: 'text/html', body: '<main><article><div class="update-components-text">Latest visible post</div><a href="/feed/update/urn:li:activity:123/">Permalink</a></article></main>' }));
+  await page.route('**/in/sample/', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<main><h1>Sample</h1><a href="/in/sample/recent-activity/posts/">Show all posts</a></main>' }));
+  await page.route('**/recent-activity/posts/', route => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<main><article><div class="update-components-text">Latest visible post</div><a href="/feed/update/urn:li:activity:123/">Permalink</a></article></main>' }));
   const p = await linkedin.profile({ url: 'https://www.linkedin.com/in/sample/' });
   assert.equal(p.recentPost, 'Latest visible post');
   assert.equal(p.name, 'Sample');
+});
+
+test('waits for deferred SDUI profile sections and excludes recommendation columns', async t => {
+  const { linkedin } = await fixture(t, `<main><div data-testid="lazy-column" id="owner">
+    <div id="sampleTopcard" componentkey="top"><section><h2>Sample</h2><p>He/Him</p><p>· 1st</p><p>Founder at Example</p></section></div>
+    </div><div data-testid="lazy-column"><h2>More profiles for you</h2><p>Wrong headline</p></div></main>
+    <script>setTimeout(() => document.querySelector('#owner').insertAdjacentHTML('beforeend', '<section><h2>About</h2><p>Building useful tools.</p></section><section><h2>Activity</h2><div componentkey="update-card-focus123"><a tabindex="0" href="/feed/update/urn:li:activity:123/">Launch announcement</a></div></section>'), 300);</script>`);
+  const p = await linkedin.profile({ url: 'https://www.linkedin.com/in/sample/' });
+  assert.equal(p.headline, 'Founder at Example');
+  assert.equal(p.about, 'Building useful tools.');
+  assert.equal(p.recentPost, 'Launch announcement');
+  assert.ok(!p.bio.includes('Wrong headline'));
+});
+
+test('keeps newest media post URL without substituting an older text post', async t => {
+  const { linkedin } = await fixture(t, `<main><h1>Sample</h1><section><h2>Activity</h2>
+    <div componentkey="update-card-focus1"><a tabindex="0" href="/feed/update/urn:li:activity:123/"><img alt="Photo"></a></div>
+    <div componentkey="update-card-focus2"><a tabindex="0" href="/feed/update/urn:li:activity:122/">Older text</a></div></section></main>`);
+  const p = await linkedin.profile({ url: 'https://www.linkedin.com/in/sample/' });
+  assert.equal(p.recentPost, '');
+  assert.equal(p.recentPostUrl, 'https://www.linkedin.com/feed/update/urn:li:activity:123/');
 });
