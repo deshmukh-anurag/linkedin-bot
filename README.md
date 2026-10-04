@@ -8,11 +8,14 @@ The bot only collects LinkedIn profile information and fills Google Sheets. It m
 
 ```text
 .env keywords → LinkedIn People Search → check SQLite
-→ skip previously saved profiles → extract new profile details
+→ skip previously saved profiles → extract new profile details → return to the same search page
+→ require current search keyword in headline
 → save pending_sheet → publish Sheet row + link → mark done
 ```
 
-`done` means successfully added to the Sheet, not contacted. There is no manual status marking. A failed Sheet write retries from the saved profile without reopening it. Previously collected profiles are skipped across keywords and connection degrees. Search result cards may appear again, but the profile itself is not revisited.
+`done` means successfully added to the Sheet, not contacted. There is no manual status marking. A failed Sheet write retries from the saved profile without reopening it. Previously collected profiles are skipped across keywords and connection degrees. Search result cards may appear again, but the profile itself is not revisited. Deleting a completed row from the Sheet is respected permanently while its SQLite record remains: sync only publishes pending records and does not recreate missing done rows. It still backs up edited Final Message text from existing rows.
+
+Only owner links from recognized People Search result cards are collected; sidebar/mutual-connection links and old discovery queues are excluded. Each profile visit returns to its source keyword/page, even after an ordinary extraction failure. The visible headline must contain the current keyword (case-insensitive, word/phrase match, with co-founder variants normalized). Missing/nonmatching headlines are skipped. Unknown result layouts halt instead of collecting arbitrary links. Keywords such as CTO remain eligible when explicitly configured.
 
 ## Setup and commands
 
