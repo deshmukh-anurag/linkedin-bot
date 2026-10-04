@@ -45,6 +45,8 @@ export class LinkedIn {
   constructor(page, c) { this.page = page; this.c = c; }
   async primary() {
     const main = this.page.locator('main').first();
+    const ownerColumn = main.locator('[data-testid="lazy-column"]').filter({ has: this.page.locator('[id$="Topcard"]') }).first();
+    if (await ownerColumn.count()) return ownerColumn;
     const region = main.getByRole('region', { name: 'Primary content', exact: true }).first();
     return await region.count() ? region : main;
   }
@@ -90,13 +92,19 @@ export class LinkedIn {
   }
   async profile(person) {
     await this.visit(person.url);
-    const main = await this.primary();
+    let main = await this.primary();
     // LinkedIn serves both classic h1 profiles and a newer h2-based layout.
     const heading = main.getByRole('heading').first();
     await heading.waitFor();
+    // The SDUI profile initially renders only its top card; wait for deferred sections.
+    const pageMain = this.page.locator('main').first();
+    if (await pageMain.locator('[componentkey]').count()) {
+      await pageMain.getByRole('heading', { name: /^(About|Activity|Experience|Education)$/ }).first().waitFor({ timeout: 10000 }).catch(() => {});
+      main = await this.primary();
+    }
     const actual = normalizeProfile(this.page.url());
     if (actual !== person.url) throw new SkipError('Profile URL changed; review identity before continuing');
-    const name = (await heading.innerText()).trim();
+    const name = (await main.getByRole('heading').first().innerText()).trim();
     const bio = (await main.innerText()).slice(0, 22000);
     const extractionNotes = [];
     const optional = async (label, fn, fallback = '') => {
@@ -109,8 +117,12 @@ export class LinkedIn {
     };
     const headline = await optional('Headline', async () => {
       const headlineNode = main.locator('.text-body-medium').first();
-      const node = await headlineNode.count() ? headlineNode : main.locator('p').first();
-      return await node.count() ? (await node.innerText({ timeout: 3000 })).trim() : '';
+      if (await headlineNode.count()) return (await headlineNode.innerText({ timeout: 3000 })).trim();
+      return main.evaluate(el => {
+        const top = el.querySelector('[id$="Topcard"]') || el;
+        return [...top.querySelectorAll('p')].filter(n => n.checkVisibility())
+          .map(n => n.innerText.trim()).find(t => t && !/^(?:[·•]\s*)?(?:1st|2nd|3rd\+?)$|^(?:he|she|they|him|her|them)(?:\s*[/|]\s*(?:he|she|they|him|her|them))+$/i.test(t)) || '';
+      });
     });
     const about = await optional('About', () => this.about(main));
     const companies = await main.locator('a[href*="/company/"]').evaluateAll(nodes => nodes.map(n => ({ name: n.innerText, url: n.href })).filter(n => n.name));
@@ -142,7 +154,7 @@ export class LinkedIn {
   }
   async postFrom(root) {
     return root.evaluate(el => {
-      const cards = [...el.querySelectorAll('[data-urn*="activity"], .feed-shared-update-v2, .occludable-update, article')]
+      const cards = [...el.querySelectorAll('[data-urn*="activity"], .feed-shared-update-v2, .occludable-update, article, [componentkey^="update-card-focus"]')]
         .filter(n => !n.closest('aside,[role="complementary"]'));
       for (const card of cards) {
         const body = card.querySelector('.update-components-text, .feed-shared-update-v2__description, [data-test-id="main-feed-activity-card__commentary"]');
@@ -154,8 +166,9 @@ export class LinkedIn {
           const u = new URL(link.href);
           if (u.protocol === 'https:' && /(^|\.)linkedin\.com$/i.test(u.hostname)) { u.search = ''; u.hash = ''; url = u.href; }
         }
-        const text = (body?.innerText || '').trim().slice(0, 22000);
-        if (text) return { text, url };
+        const modernBody = [...card.querySelectorAll('a[tabindex="0"][href]')].find(n => /\/posts\/|\/feed\/update\//.test(n.href) && n.innerText.trim());
+        const text = (body?.innerText || modernBody?.innerText || '').trim().slice(0, 22000);
+        if (text || url) return { text, url };
       }
       return { text: '', url: '' };
     });
@@ -169,7 +182,7 @@ export class LinkedIn {
         return u.origin === profile.origin && u.pathname === `${profile.pathname}recent-activity/posts/`;
       } catch { return false; }
     });
-    if (!activity) return visible;
+    if (!activity || visible.text || visible.url) return visible;
     await this.visit(activity);
     const root = await this.primary();
     await root.waitFor({ timeout: 8000 });
