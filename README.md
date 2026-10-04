@@ -56,16 +56,16 @@ The bot fills:
 - Name, Profile URL and visible Headline.
 - About: separate About section text when available.
 - Recent Post and Recent Post URL: first readable post shown in the profile activity or an observed owner-specific Posts page. This may be a pinned/reposted item; chronological freshness is not guaranteed. Private/missing content stays blank.
-- Extraction Notes: optional-field errors; an About/post failure does not discard the rest of the profile.
+- Optional extraction failures do not discard the profile. Diagnostic details remain local in SQLite.
 - Profile Text: captured text from the profile's primary content, bounded to 22,000 characters. It is not a verified or exhaustive resume.
 - Companies (profile) and Company Links: visible company links from the profile. They can include past employers; they are not independently verified current-company information. Empty fields mean the page did not expose that information.
 - Matched Keywords, Action Type, recipient-specific messaging/invitation URL, Send link, State and Added At.
 
-**DM Draft, Connection Note and Final Message remain blank for new profiles.** Fill these yourself or through your separate local Codex workflow. The bot preserves manually edited message fields. Existing generated drafts in older SQLite records remain available; no new ones are generated.
+**Final Message remains blank for new profiles.** Fill it yourself or through your separate local Codex workflow. The bot preserves manually edited messages. Existing generated drafts in older SQLite records remain available; no new ones are generated.
 
 The Send hyperlink uses the current Final Message when available. It opens LinkedIn; you click the actual Send button yourself. An empty Final Message opens an empty composer. DM prefill was observed working on desktop LinkedIn, but it is not a guaranteed public API. If only a profile link is available, the profile opens instead. Invitation notes may require manual copy/paste. Use a browser signed into the intended account.
 
-No Apps Script, email setup or approval/status trigger is needed. The previous 17-column profile Sheet is automatically upgraded by appending About, Recent Post, Recent Post URL and Extraction Notes. Existing messages and Send links keep their columns. Conflicting headers or occupied new columns are not overwritten. Previously completed profiles are not revisited; new fields on old rows remain blank unless already saved in SQLite. Older incompatible research tabs require a fresh `GOOGLE_SHEET_TAB`. SQLite history remains intact.
+No Apps Script, email setup or approval/status trigger is needed. The Sheet uses 18 columns (A:R). Older 17/21-column profile tabs migrate automatically: DM Draft, Connection Note and Extraction Notes are removed when present, while retained cells and formulas shift together. Final Message is J, Send is K and Messaging URL is O. Conflicting headers or occupied new columns are not overwritten. Completed profiles are not revisited. SQLite history remains intact.
 
 ## SQLite: no server, URL or key
 
