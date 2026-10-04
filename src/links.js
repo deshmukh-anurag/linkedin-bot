@@ -24,4 +24,4 @@ export function composeLink(person, action) {
 
 // References the current row dynamically, including the latest manually edited message.
 // Only this trusted formula is written as USER_ENTERED; profile/message content stays RAW.
-export const SEND_FORMULA = '=IF(INDEX(Q:Q,ROW())="","",HYPERLINK(INDEX(Q:Q,ROW())&IF(REGEXMATCH(INDEX(Q:Q,ROW()),"/messaging/compose/"),"&body="&ENCODEURL(INDEX(L:L,ROW())),""),IF(REGEXMATCH(INDEX(Q:Q,ROW()),"/messaging/compose/"),"Open message ↗",IF(REGEXMATCH(INDEX(Q:Q,ROW()),"/preload/custom-invite/"),"Open invitation ↗","Open profile ↗"))))';
+export const SEND_FORMULA = '=IF(INDEX(O:O,ROW())="","",HYPERLINK(INDEX(O:O,ROW())&IF(REGEXMATCH(INDEX(O:O,ROW()),"/messaging/compose/"),"&body="&ENCODEURL(INDEX(J:J,ROW())),""),IF(REGEXMATCH(INDEX(O:O,ROW()),"/messaging/compose/"),"Open message ↗",IF(REGEXMATCH(INDEX(O:O,ROW()),"/preload/custom-invite/"),"Open invitation ↗","Open profile ↗"))))';
