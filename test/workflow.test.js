@@ -22,7 +22,7 @@ test('compose links retain only observed recipient; edited text can be encoded s
   assert.equal(new URL(withUrn).searchParams.get('profileUrn'), 'urn:li:fsd_profile:known-id');
   const message = 'Hello & thanks!\nNamaskar 👋 #engineering';
   assert.equal(new URL(`${link}&body=${encodeURIComponent(message)}`).searchParams.get('body'), message);
-  assert.ok(SEND_FORMULA.includes('ENCODEURL(INDEX(L:L,ROW()))'));
+  assert.ok(SEND_FORMULA.includes('ENCODEURL(INDEX(J:J,ROW()))'));
 });
 test('missing or unsafe messaging links fall back to profile without guessing recipient', () => {
   assert.equal(composeLink({ ...person, messagingUrl: '' }, 'dm'), person.url);
