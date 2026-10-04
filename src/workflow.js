@@ -23,13 +23,16 @@ export async function collect({ c, store, sheets, linkedin, log = console.log })
   const seen = new Set();
   const processPerson = async (person, keyword) => {
     store.discover(person, keyword);
-    if (seen.has(person.url) || store.hasProfile(person.url)) return;
+    if (seen.has(person.url) || store.hasProfile(person.url)) {
+      log(`Profile skipped: already saved or checked: ${person.url}`);
+      return;
+    }
     if (scanned >= c.maxProfiles || collected >= c.profilesPerRun) return;
     seen.add(person.url); scanned++;
     try {
       const profile = await linkedin.profile(person);
       if (!matchesKeyword(profile.headline, keyword)) {
-        log(`Profile skipped: headline does not match ${keyword}`);
+        log(`Profile skipped: headline does not match ${keyword}: ${person.url}`);
         return;
       }
       const contact = store.contacts().find(p => p.profile_url === person.url);
@@ -51,10 +54,18 @@ export async function collect({ c, store, sheets, linkedin, log = console.log })
     for (let n = 1; n <= c.pages; n++) {
       if (scanned >= c.maxProfiles || collected >= c.profilesPerRun) break;
       const people = await linkedin.discover(keyword, n);
+      log(`Search ${keyword}, page ${n}: ${people.length} unique profiles found`);
       if (!people.length) break;
       // Save all discovered identities even when this run's collection target is reached.
       for (const person of people) store.discover(person, keyword);
-      for (const person of people) await processPerson(person, keyword);
+      for (const [index, person] of people.entries()) {
+        if (scanned >= c.maxProfiles || collected >= c.profilesPerRun) {
+          log('Run target or scan limit reached; remaining profiles stay eligible for the next run');
+          break;
+        }
+        log(`Search ${keyword}, page ${n}: profile ${index + 1}/${people.length}`);
+        await processPerson(person, keyword);
+      }
     }
   }
   await sync(store, sheets);

@@ -110,3 +110,14 @@ test('headline qualification respects word boundaries and configured keywords', 
   assert.equal(matchesKeyword('Engineering at Example', 'founder'), false);
   assert.equal(matchesKeyword('', 'founder'), false);
 });
+
+test('all profiles on a page are processed before discovery moves to the next page', async () => {
+  const store=new Store(':memory:'); const events=[];
+  const sheets={rows:async()=>[],upsert:async()=>({})};
+  const linkedin={verifySession:async()=>{},discover:async(k,n)=>{
+    events.push(`page${n}`); return [1,2,3].map(i=>({...person,url:`https://www.linkedin.com/in/p${n}-${i}/`}));
+  },profile:async p=>{events.push(new URL(p.url).pathname);return {...p,headline:'Founder'};}};
+  await collect({c:{...c,pages:2},store,sheets,linkedin,log:()=>{}});
+  assert.deepEqual(events,['page1','/in/p1-1/','/in/p1-2/','/in/p1-3/','page2','/in/p2-1/','/in/p2-2/','/in/p2-3/']);
+  store.close();
+});
