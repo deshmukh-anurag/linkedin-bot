@@ -1,0 +1,15 @@
+{
+  "name": "YOUR NAME",
+  "targetRoles": ["Full Stack Engineer Intern"],
+  "preferredStartups": ["Add your preferred industry or stage"],
+  "skills": ["Add verified skills"],
+  "experience": [
+    { "company": "Add company", "role": "Add role", "achievements": ["Add only true achievements and metrics"] }
+  ],
+  "projects": [
+    { "name": "Add project", "contribution": "What you personally built", "evidenceUrl": "" }
+  ],
+  "links": { "portfolio": "", "github": "" },
+  "availability": "Add availability",
+  "callToAction": "Would you be open to a 10-minute chat about where I could contribute?"
+}
