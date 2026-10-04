@@ -29,6 +29,16 @@ test('discovery deduplicates results and excludes sidebar recommendations', asyn
   assert.equal(people.length, 1); assert.equal(people[0].url, 'https://www.linkedin.com/in/sample/');
 });
 
+test('discovery waits for modern result owners and ignores early mutual links', async t => {
+  const { linkedin } = await fixture(t, `<main><a href="/in/mutual/">Mutual connection</a>
+    <aside><a tabindex="0" componentkey="sidebar" href="/in/aside/">Sidebar profile</a></aside>
+    <div id="results"></div></main>
+    <script>setTimeout(() => document.querySelector('#results').innerHTML =
+      '<a tabindex="0" componentkey="owner1" href="/in/first/">First Founder • 1st</a><a tabindex="0" componentkey="owner2" href="/in/second/">Second Founder</a>', 300);</script>`);
+  const people = await linkedin.discover('founder', 1);
+  assert.deepEqual(people.map(p => p.url), ['first', 'second'].map(x => `https://www.linkedin.com/in/${x}/`));
+});
+
 test('extracts About and a visible recent post while excluding sidebar content', async t => {
   const { linkedin } = await fixture(t, `<main><h1>Sample</h1><p class="text-body-medium">Founder at Example</p>
     <section><div id="about"></div><h2>About</h2><div class="inline-show-more-text">I build useful tools.</div></section>

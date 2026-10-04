@@ -74,14 +74,24 @@ export class LinkedIn {
     await this.visit(u.href);
     const main = this.page.locator('main').first();
     await main.waitFor();
-    // DOM-driven waits rather than sleep-based clicking.
-    await main.locator('a[href*="/in/"]').first().waitFor({ timeout: 12000 }).catch(async e => {
-      if (!/no results|no people found|try a different search/i.test(await main.innerText())) throw e;
-    });
     const cardSelector = '.reusable-search__result-container, [data-view-name="people-search-result"], [data-testid="search-result"], [componentkey*="SearchResult"], [componentkey*="search-result"]';
+    const modernOwnerSelector = 'a[tabindex="0"][componentkey][href*="/in/"]';
+    // Wait for a result owner, since mutual-connection links can appear first.
+    const readySelector = [modernOwnerSelector, ...cardSelector.split(', ').map(selector => `${selector} a[href*="/in/"]`)].join(', ');
+    await this.page.waitForFunction(selector => {
+      const root = document.querySelector('main');
+      if (!root) return false;
+      if (/no results|no people found|try a different search/i.test(root.innerText)) return true;
+      return [...root.querySelectorAll(selector)].some(node => !node.closest('aside,[role="complementary"]'));
+    }, readySelector, { timeout: 12000 }).catch(e => {
+      if (e.name !== 'TimeoutError') throw e;
+    });
+    const modernLinks = await main.locator(modernOwnerSelector).evaluateAll(nodes => nodes
+      .filter(n => !n.closest('aside,[role="complementary"]'))
+      .map(n => ({ url: n.href, name: n.innerText || n.getAttribute('aria-label') || '' })));
     const cards = main.locator(cardSelector);
     // Broad component keys can identify a whole results list, not one person.
-    const links = await cards.evaluateAll((nodes, selector) => {
+    const legacyLinks = modernLinks.length ? [] : await cards.evaluateAll((nodes, selector) => {
       const explicit = '.reusable-search__result-container, [data-view-name="people-search-result"], [data-testid="search-result"]';
       const excluded = n => n.closest('aside,[role="complementary"]');
       const owners = [];
@@ -106,6 +116,7 @@ export class LinkedIn {
       }
       return owners;
     }, cardSelector);
+    const links = modernLinks.length ? modernLinks : legacyLinks;
     if (!links.length && !/no results|no people found|try a different search/i.test(await main.innerText())) {
       throw new HaltError('People search result cards not recognized; inspect the search layout before collecting');
     }
