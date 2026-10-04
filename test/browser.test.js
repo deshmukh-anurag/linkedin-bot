@@ -101,3 +101,26 @@ test('access blocks do not navigate back to search', async t => {
   await assert.rejects(linkedin.profile({url:'https://www.linkedin.com/in/blocked/',searchUrl:'https://www.linkedin.com/search/results/people/?keywords=founder'}),/HTTP 429/);
   assert.equal(page.url(),'https://www.linkedin.com/in/blocked/');
 });
+
+test('a SearchResults wrapper yields every result owner, excluding mutual links', async t => {
+  const {linkedin}=await fixture(t, `<main><div componentkey="PeopleSearchResults"><ul>
+    <li><a href="/in/first/">First Founder</a><a href="/in/mutual/">Mutual connection</a></li>
+    <li><a href="/in/second/">Second Founder</a></li>
+    <li><a href="/in/third/">Third Founder</a></li>
+    </ul></div></main>`);
+  const people=await linkedin.discover('founder',1);
+  assert.deepEqual(people.map(p=>p.url),['first','second','third'].map(x=>`https://www.linkedin.com/in/${x}/`));
+});
+
+test('nested result wrappers use individual cards without selecting sidebar or mutual profiles', async t => {
+  const {linkedin}=await fixture(t, `<main><div componentkey="PeopleSearchResults">
+    <div data-testid="search-result"><a href="/in/first/">First</a><a href="/in/mutual/">Mutual</a></div>
+    <div data-testid="search-result"><a href="/in/second/">Second</a></div>
+    </div><aside><div data-testid="search-result"><a href="/in/aside/">Aside</a></div></aside></main>`);
+  assert.deepEqual((await linkedin.discover('founder',1)).map(p=>p.name),['First','Second']);
+});
+
+test('ambiguous multi-person wrapper fails instead of silently taking only the first', async t => {
+  const {linkedin}=await fixture(t, '<main><div componentkey="PeopleSearchResults"><a href="/in/first/">First</a><a href="/in/second/">Second</a></div></main>');
+  await assert.rejects(linkedin.discover('founder',1),/Ambiguous search wrapper/);
+});

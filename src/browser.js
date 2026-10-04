@@ -78,12 +78,34 @@ export class LinkedIn {
     await main.locator('a[href*="/in/"]').first().waitFor({ timeout: 12000 }).catch(async e => {
       if (!/no results|no people found|try a different search/i.test(await main.innerText())) throw e;
     });
-    const cards = main.locator('.reusable-search__result-container, [data-view-name="people-search-result"], [data-testid="search-result"], [componentkey*="SearchResult"], [componentkey*="search-result"]');
-    // Only the owner link of a result card, never mutual-connection/sidebar links.
-    const links = await cards.evaluateAll(nodes => nodes.filter(n => !n.closest('aside,[role="complementary"]')).flatMap(card => {
-      const link = [...card.querySelectorAll('a[href*="/in/"]')].find(n => n.innerText.trim() || n.getAttribute('aria-label'));
-      return link ? [{ url: link.href, name: link.innerText || link.getAttribute('aria-label') || '' }] : [];
-    }));
+    const cardSelector = '.reusable-search__result-container, [data-view-name="people-search-result"], [data-testid="search-result"], [componentkey*="SearchResult"], [componentkey*="search-result"]';
+    const cards = main.locator(cardSelector);
+    // Broad component keys can identify a whole results list, not one person.
+    const links = await cards.evaluateAll((nodes, selector) => {
+      const explicit = '.reusable-search__result-container, [data-view-name="people-search-result"], [data-testid="search-result"]';
+      const excluded = n => n.closest('aside,[role="complementary"]');
+      const owners = [];
+      for (const node of nodes) {
+        if (excluded(node)) continue;
+        // Prefer actual result cards over their enclosing list wrapper.
+        if (!node.matches(explicit) && node.querySelector(selector)) continue;
+        let rows = [node];
+        if (!node.matches(explicit)) {
+          const items = [...node.querySelectorAll('li,[role="listitem"]')]
+            .filter(n => !excluded(n) && n.querySelector('a[href*="/in/"]'));
+          if (items.length) rows = items.filter(n => !items.some(parent => parent !== n && parent.contains(n)));
+          else {
+            const urls = new Set([...node.querySelectorAll('a[href*="/in/"]')].map(n => new URL(n.href).pathname));
+            if (urls.size > 1) throw new Error('Ambiguous search wrapper: individual result cards not recognized');
+          }
+        }
+        for (const row of rows) {
+          const link = [...row.querySelectorAll('a[href*="/in/"]')].find(n => !excluded(n) && (n.innerText.trim() || n.getAttribute('aria-label')));
+          if (link) owners.push({ url: link.href, name: link.innerText || link.getAttribute('aria-label') || '' });
+        }
+      }
+      return owners;
+    }, cardSelector);
     if (!links.length && !/no results|no people found|try a different search/i.test(await main.innerText())) {
       throw new HaltError('People search result cards not recognized; inspect the search layout before collecting');
     }
