@@ -78,19 +78,50 @@ export class LinkedIn {
     await main.locator('a[href*="/in/"]').first().waitFor({ timeout: 12000 }).catch(async e => {
       if (!/no results|no people found|try a different search/i.test(await main.innerText())) throw e;
     });
-    const links = await main.locator('a[href*="/in/"]').evaluateAll(nodes => nodes.filter(n => !n.closest('aside,[role="complementary"]')).map(n => ({ url: n.href, name: n.innerText || n.getAttribute('aria-label') || '' })));
+    const cards = main.locator('.reusable-search__result-container, [data-view-name="people-search-result"], [data-testid="search-result"], [componentkey*="SearchResult"], [componentkey*="search-result"]');
+    // Only the owner link of a result card, never mutual-connection/sidebar links.
+    const links = await cards.evaluateAll(nodes => nodes.filter(n => !n.closest('aside,[role="complementary"]')).flatMap(card => {
+      const link = [...card.querySelectorAll('a[href*="/in/"]')].find(n => n.innerText.trim() || n.getAttribute('aria-label'));
+      return link ? [{ url: link.href, name: link.innerText || link.getAttribute('aria-label') || '' }] : [];
+    }));
+    if (!links.length && !/no results|no people found|try a different search/i.test(await main.innerText())) {
+      throw new HaltError('People search result cards not recognized; inspect the search layout before collecting');
+    }
+    const uSearch = u.href;
     const unique = new Map();
     for (const link of links) {
       try {
         const u = new URL(link.url); u.search = ''; u.hash = '';
         const url = normalizeProfile(u.href);
         const name = link.name.split('\n')[0].trim();
-        if (!unique.has(url) || (!unique.get(url).name && name)) unique.set(url, { url, name, degree: this.c.degree });
+        if (!unique.has(url) || (!unique.get(url).name && name)) unique.set(url, { url, name, degree: this.c.degree, searchUrl: uSearch });
       } catch { /* Non-profile link. */ }
     }
     return [...unique.values()];
   }
   async profile(person) {
+    if (!person.searchUrl) return this.extractProfile(person);
+    const source = new URL(person.searchUrl);
+    if (source.origin !== 'https://www.linkedin.com' || source.pathname !== '/search/results/people/') {
+      throw new SkipError('Invalid search provenance');
+    }
+    let halted = false;
+    try {
+      return await this.extractProfile(person);
+    } catch (e) {
+      halted = e instanceof HaltError;
+      throw e;
+    } finally {
+      // Stay on the same keyword/page between profiles, including extraction failures.
+      // Do not navigate away from a login or verification screen.
+      if (!halted) {
+        await this.guard();
+        await this.visit(source.href);
+        await this.page.locator('main').first().waitFor();
+      }
+    }
+  }
+  async extractProfile(person) {
     await this.visit(person.url);
     let main = await this.primary();
     // LinkedIn serves both classic h1 profiles and a newer h2-based layout.

@@ -23,7 +23,7 @@ test('profile scraper extracts recipient link without clicking or opening messag
   assert.equal(new URL(page.url()).pathname, '/in/sample/');
 });
 test('discovery deduplicates results and excludes sidebar recommendations', async t => {
-  const { linkedin } = await fixture(t, `<main><a href="/in/sample/?trk=1">Sample</a><a href="/in/sample/">Sample</a>
+  const { linkedin } = await fixture(t, `<main><div data-view-name="people-search-result"><a href="/in/sample/?trk=1">Sample</a><a href="/in/mutual/">Mutual connection</a></div><div data-view-name="people-search-result"><a href="/in/sample/">Sample</a></div>
     <aside><a href="/in/irrelevant/">Other</a></aside></main>`);
   const people = await linkedin.discover('founder', 1);
   assert.equal(people.length, 1); assert.equal(people[0].url, 'https://www.linkedin.com/in/sample/');
@@ -78,4 +78,26 @@ test('keeps newest media post URL without substituting an older text post', asyn
   const p = await linkedin.profile({ url: 'https://www.linkedin.com/in/sample/' });
   assert.equal(p.recentPost, '');
   assert.equal(p.recentPostUrl, 'https://www.linkedin.com/feed/update/urn:li:activity:123/');
+});
+
+test('returns to exact keyword search page after each profile and after extraction errors', async t => {
+  const {page, linkedin} = await fixture(t, '<main><h1>Sample</h1><p>Founder</p></main>');
+  const searchUrl='https://www.linkedin.com/search/results/people/?keywords=founder&network=%5B%22F%22%5D&page=2';
+  await linkedin.profile({url:'https://www.linkedin.com/in/sample/',searchUrl});
+  assert.equal(page.url(),searchUrl);
+  linkedin.extractProfile = async () => { await page.goto('https://www.linkedin.com/in/other/'); throw new Error('Extraction failed'); };
+  await assert.rejects(linkedin.profile({url:'https://www.linkedin.com/in/other/',searchUrl}), /Extraction failed/);
+  assert.equal(page.url(),searchUrl);
+});
+
+test('unknown result layout does not collect arbitrary profile links', async t => {
+  const {linkedin} = await fixture(t, '<main><a href="/in/recommendation/">Recommended person</a></main>');
+  await assert.rejects(linkedin.discover('founder',1), /not recognized/);
+});
+
+test('access blocks do not navigate back to search', async t => {
+  const {page,linkedin}=await fixture(t,'<main>Blocked</main>');
+  await page.route('**/in/blocked/',route=>route.fulfill({status:429,contentType:'text/html',body:'<main>Rate limited</main>'}));
+  await assert.rejects(linkedin.profile({url:'https://www.linkedin.com/in/blocked/',searchUrl:'https://www.linkedin.com/search/results/people/?keywords=founder'}),/HTTP 429/);
+  assert.equal(page.url(),'https://www.linkedin.com/in/blocked/');
 });
